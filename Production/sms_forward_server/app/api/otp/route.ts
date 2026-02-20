@@ -64,19 +64,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Handle KV connection errors
     if (error instanceof Error) {
-      const isDev = process.env.NODE_ENV === 'development';
-      let errorMessage = 'Database connection error';
-      
-      if (error.message.includes('Missing required environment variables')) {
-        errorMessage = isDev
-          ? 'Vercel KV not configured. For local dev: Create KV database in Vercel dashboard and add KV_REST_API_URL and KV_REST_API_TOKEN to .env.local. On Vercel: Link KV database to your project.'
-          : 'Vercel KV not configured. Please link a KV database to your project in Vercel dashboard.';
-      } else if (isDev) {
-        errorMessage = `Database error: ${error.message}`;
-      }
-      
+      // Use the detailed error message from getKVClient
       return NextResponse.json(
-        { error: errorMessage },
+        { error: error.message },
         { status: 503 }
       );
     }
@@ -154,19 +144,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     // Handle KV connection errors
     if (error instanceof Error) {
-      const isDev = process.env.NODE_ENV === 'development';
-      let errorMessage = 'Database connection error';
-      
-      if (error.message.includes('Missing required environment variables')) {
-        errorMessage = isDev
-          ? 'Vercel KV not configured. For local dev: Create KV database in Vercel dashboard and add KV_REST_API_URL and KV_REST_API_TOKEN to .env.local. On Vercel: Link KV database to your project.'
-          : 'Vercel KV not configured. Please link a KV database to your project in Vercel dashboard.';
-      } else if (isDev) {
-        errorMessage = `Database error: ${error.message}`;
-      }
-      
+      // Use the detailed error message from getKVClient
       return NextResponse.json(
-        { error: errorMessage },
+        { error: error.message },
         { status: 503 }
       );
     }

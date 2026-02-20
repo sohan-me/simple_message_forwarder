@@ -6,7 +6,7 @@ A production-ready Next.js serverless API for relaying and managing OTP (One-Tim
 
 - ✅ Serverless-compatible Next.js App Router
 - ✅ TypeScript for type safety
-- ✅ Vercel KV for serverless storage (no external Redis needed)
+- ✅ Redis for serverless storage (supports any Redis provider via connection string)
 - ✅ OTP extraction from SMS messages (4-8 digits)
 - ✅ Automatic expiration (2 minutes TTL)
 - ✅ One-time use validation
@@ -29,28 +29,27 @@ npm install
 yarn install
 ```
 
-### 2. Set Up Vercel KV (Simple!)
+### 2. Set Up Redis Connection
 
-**On Vercel (Production):**
-1. Deploy your project to Vercel
-2. Go to your project dashboard → **Storage** → **Create** → **KV Database**
-3. Link the KV database to your project
-4. **That's it!** Environment variables are automatically configured ✅
-
-**For Local Development (Optional):**
-1. Create a KV database in your Vercel project dashboard
-2. Copy the KV REST API URL and Token
-3. Create `.env.local` file:
+**For Local Development:**
+1. Create a `.env.local` file:
 ```bash
 cp .env.example .env.local
 ```
-4. Add your credentials:
+
+2. Add your Redis connection string:
 ```env
-KV_REST_API_URL=https://your-kv-instance.vercel-storage.com
-KV_REST_API_TOKEN=your-kv-token-here
+REDIS_URL=redis://default:password@host:port
 ```
 
-**Note:** For local testing, you can skip this step and the API will show a helpful error message. For production on Vercel, just link the KV database - it's automatic!
+**For Production on Vercel:**
+1. Go to your Vercel project dashboard → **Settings** → **Environment Variables**
+2. Add a new environment variable:
+   - **Name:** `REDIS_URL`
+   - **Value:** Your Redis connection string (e.g., `redis://default:password@host:port`)
+3. Save and redeploy
+
+**Note:** You can use any Redis provider (Redis Labs, Upstash, AWS ElastiCache, etc.) - just provide the connection string in the `REDIS_URL` format.
 
 ### 4. Run Development Server
 
@@ -173,17 +172,22 @@ vercel
 
 1. Push your code to a GitHub repository
 2. Import the repository in [Vercel Dashboard](https://vercel.com/dashboard)
-3. Create and link KV database:
-   - In your project dashboard → **Storage** → **Create** → **KV Database**
-   - Link it to your project
-   - **Done!** Environment variables are automatically set ✅
+3. Add Redis connection string:
+   - Go to **Settings** → **Environment Variables**
+   - Add `REDIS_URL` with your Redis connection string
+   - Format: `redis://default:password@host:port`
 4. Deploy
 
 ### Environment Variables
 
-**On Vercel:** Automatically configured when you link a KV database - **no manual setup needed!** ✅
+**Required:**
+- `REDIS_URL` - Your Redis connection string
+  - Format: `redis://default:password@host:port`
+  - Example: `redis://default:password@redis.example.com:6379`
 
-**For Local Development:** Optional - only needed if you want to test with real KV storage locally. Otherwise, you'll see a helpful error message explaining how to set it up.
+**On Vercel:** Add `REDIS_URL` in Project Settings → Environment Variables
+
+**For Local Development:** Add `REDIS_URL` to `.env.local` file
 
 ## Project Structure
 
@@ -194,7 +198,7 @@ sms_forward_server/
 │       └── otp/
 │           └── route.ts          # API route handlers
 ├── lib/
-│   ├── redis.ts                   # Vercel KV client setup
+│   ├── redis.ts                   # Redis client setup
 │   ├── types.ts                   # TypeScript type definitions
 │   └── utils.ts                   # Utility functions (OTP extraction, validation)
 ├── .env.example                   # Environment variables template
@@ -210,13 +214,13 @@ sms_forward_server/
 1. **OTP Storage (POST):**
    - Accepts phone number and SMS message
    - Extracts 4-8 digit OTP using regex
-   - Stores in Vercel KV with key format: `otp:{phone}`
+   - Stores in Redis with key format: `otp:{phone}`
    - Sets 2-minute expiration (TTL)
    - Marks OTP as unused
 
 2. **OTP Retrieval (GET):**
    - Validates phone number parameter
-   - Fetches OTP from Vercel KV
+   - Fetches OTP from Redis
    - Checks if OTP exists and is unused
    - Marks OTP as used
    - Returns OTP value
@@ -224,10 +228,10 @@ sms_forward_server/
 ## Performance & Scalability
 
 - ✅ Fully serverless - scales automatically on Vercel
-- ✅ No in-memory storage - all data in Vercel KV
-- ✅ Concurrent request safe - Vercel KV handles atomic operations
-- ✅ Fast response times - Vercel KV optimized for serverless
-- ✅ No external services needed - integrated with Vercel platform
+- ✅ No in-memory storage - all data in Redis
+- ✅ Concurrent request safe - Redis handles atomic operations
+- ✅ Fast response times - Redis optimized for key-value operations
+- ✅ Works with any Redis provider (Redis Labs, Upstash, AWS ElastiCache, etc.)
 
 ## Security Considerations
 
