@@ -38,7 +38,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Store OTP in Vercel KV
+    // Store OTP in Redis
     const kv = getKVClient();
     const otpData: OTPData = {
       otp,
@@ -48,8 +48,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const key = `otp:${body.phone}`;
     
-    // Set with TTL of 2 minutes (120 seconds)
-    await kv.setex(key, OTP_TTL, otpData);
+    try {
+      // Set with TTL of 2 minutes (120 seconds)
+      await kv.setex(key, OTP_TTL, otpData);
+    } finally {
+      // Clean up connection in serverless environment
+      if ('quit' in kv && typeof kv.quit === 'function') {
+        await kv.quit().catch(() => {
+          // Ignore quit errors
+        });
+      }
+    }
 
     const response: PostOTPResponse = { status: 'stored' };
     return NextResponse.json(response, { status: 200 });
@@ -103,10 +112,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Fetch OTP from Vercel KV
+    // Fetch OTP from Redis
     const kv = getKVClient();
     const key = `otp:${phone}`;
-    const data = await kv.get<OTPData>(key);
+    let data: OTPData | null = null;
+    
+    try {
+      data = await kv.get<OTPData>(key);
+    } finally {
+      // Clean up connection in serverless environment
+      if ('quit' in kv && typeof kv.quit === 'function') {
+        await kv.quit().catch(() => {
+          // Ignore quit errors
+        });
+      }
+    }
 
     // If not found, return 404
     if (!data) {
@@ -135,9 +155,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Mark as used and update KV
+    // Mark as used and update Redis
     otpData.used = true;
-    await kv.setex(key, OTP_TTL, otpData);
+    try {
+      await kv.setex(key, OTP_TTL, otpData);
+    } finally {
+      // Clean up connection in serverless environment
+      if ('quit' in kv && typeof kv.quit === 'function') {
+        await kv.quit().catch(() => {
+          // Ignore quit errors
+        });
+      }
+    }
 
     const response: GetOTPResponse = { otp: otpData.otp };
     return NextResponse.json(response, { status: 200 });
