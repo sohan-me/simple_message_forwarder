@@ -14,6 +14,9 @@ export interface PostOTPResponse {
 }
 
 export interface GetOTPResponse {
-  otp: string;
+  ok: boolean;
+  count: number;
+  messages: Array<{ otp: string }>;
+  checkedAt: string; // ISO 8601
 }
 

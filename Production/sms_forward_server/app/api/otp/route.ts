@@ -90,9 +90,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 /**
  * GET /api/otp?phone=123456789
- * Retrieves OTP from Vercel KV, marks it as used, and returns it
+ * Checks for OTP for the given phone. Returns { ok, count, messages, checkedAt }.
+ * If an unused OTP exists, it is returned in messages and marked as used.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const checkedAt = new Date().toISOString();
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const phone = searchParams.get('phone');
@@ -115,63 +118,67 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Fetch OTP from Redis
     const kv = getKVClient();
     const key = `otp:${phone}`;
-    
+
     try {
-      // Get OTP data
       const data = await kv.get<OTPData>(key);
 
-      // If not found, return 404
+      // No OTP or expired
       if (!data) {
-        return NextResponse.json(
-          { error: 'OTP not found or expired' },
-          { status: 404 }
-        );
+        const response: GetOTPResponse = {
+          ok: true,
+          count: 0,
+          messages: [],
+          checkedAt,
+        };
+        return NextResponse.json(response, { status: 200 });
       }
 
-      // Data is already parsed from JSON
       const otpData = data as OTPData;
 
-      // Validate data structure
       if (!otpData.otp || typeof otpData.used !== 'boolean') {
-        return NextResponse.json(
-          { error: 'Invalid OTP data format' },
-          { status: 500 }
-        );
+        const response: GetOTPResponse = {
+          ok: true,
+          count: 0,
+          messages: [],
+          checkedAt,
+        };
+        return NextResponse.json(response, { status: 200 });
       }
 
-      // Check if already used
+      // Already used
       if (otpData.used) {
-        return NextResponse.json(
-          { error: 'OTP already used' },
-          { status: 404 }
-        );
+        const response: GetOTPResponse = {
+          ok: true,
+          count: 0,
+          messages: [],
+          checkedAt,
+        };
+        return NextResponse.json(response, { status: 200 });
       }
 
       // Mark as used and update Redis
       otpData.used = true;
       await kv.setex(key, OTP_TTL, otpData);
 
-      const response: GetOTPResponse = { otp: otpData.otp };
+      const response: GetOTPResponse = {
+        ok: true,
+        count: 1,
+        messages: [{ otp: otpData.otp }],
+        checkedAt,
+      };
       return NextResponse.json(response, { status: 200 });
     } finally {
-      // Clean up connection in serverless environment (after all operations)
       if ('quit' in kv && typeof kv.quit === 'function') {
-        await kv.quit().catch(() => {
-          // Ignore quit errors
-        });
+        await kv.quit().catch(() => {});
       }
     }
   } catch (error) {
-    // Handle KV connection errors
     if (error instanceof Error) {
-      // Use the detailed error message from getKVClient
       return NextResponse.json(
         { error: error.message },
         { status: 503 }
       );
     }
-
-    // Generic server error
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
