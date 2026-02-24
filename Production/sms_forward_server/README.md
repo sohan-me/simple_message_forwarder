@@ -1,17 +1,16 @@
-# SMS Forward Server - OTP Relay API
+# SMS Forward Server
 
-A production-ready Next.js serverless API for relaying and managing OTP (One-Time Password) codes. Designed for deployment on Vercel with Vercel KV as the storage backend.
+A production-ready Next.js serverless API for relaying SMS messages. Sync HTTP only (no WebSockets). Designed for deployment on Vercel with Redis storage.
 
 ## Features
 
-- ✅ Serverless-compatible Next.js App Router
-- ✅ TypeScript for type safety
-- ✅ Redis for serverless storage (supports any Redis provider via connection string)
-- ✅ OTP extraction from SMS messages (4-8 digits)
-- ✅ Automatic expiration (2 minutes TTL)
-- ✅ One-time use validation
-- ✅ Production-ready error handling
-- ✅ Proper HTTP status codes
+- Serverless-compatible Next.js App Router
+- TypeScript for type safety
+- Redis for storage (supports any Redis provider via connection string)
+- Stores full message (no OTP extraction)
+- 1-hour TTL for stored messages
+- One-time read: message is marked used when retrieved
+- Sync HTTP only; no WebSockets
 
 ## Prerequisites
 
@@ -59,19 +58,19 @@ npm run dev
 yarn dev
 ```
 
-The API will be available at `http://localhost:3000/api/otp`
+The API will be available at `http://localhost:3000/api/otp` (POST) and `http://localhost:3000/api/sms/[number]` (GET).
 
 ## API Endpoints
 
 ### POST /api/otp
 
-Store an OTP extracted from an SMS message.
+Store the full SMS message for a phone number (no OTP extraction). Messages expire after 1 hour.
 
 **Request Body:**
 ```json
 {
   "phone": "1234567890",
-  "message": "Your OTP is 123456"
+  "message": "Your full SMS body here (any format)"
 }
 ```
 
@@ -83,27 +82,35 @@ Store an OTP extracted from an SMS message.
 ```
 
 **Error Responses:**
-- `400` - Missing fields, invalid phone, or no OTP found
+- `400` - Missing fields, invalid phone, or empty message
 - `503` - Database connection error
 - `500` - Internal server error
 
-### GET /api/otp?phone=1234567890
+### GET /api/sms/[number]
 
-Retrieve and mark an OTP as used.
+Check for a stored message for the given phone number. Sync HTTP only (no WebSockets). Path example: `GET /api/sms/1234567890`.
 
-**Query Parameters:**
-- `phone` (required) - Phone number to retrieve OTP for
-
-**Response (200):**
+**Response (200) when no message or already used:**
 ```json
 {
-  "otp": "123456"
+  "ok": true,
+  "count": 0,
+  "messages": [],
+  "checkedAt": "2026-02-24T18:32:26.160Z"
+}
+```
+
+**Response (200) when a message is available (and mark it used):**
+```json
+{
+  "ok": true,
+  "count": 1,
+  "messages": [{ "message": "full SMS body here" }],
+  "checkedAt": "2026-02-24T18:32:26.160Z"
 }
 ```
 
 **Error Responses:**
-- `400` - Missing or invalid phone parameter
-- `404` - OTP not found, expired, or already used
 - `503` - Database connection error
 - `500` - Internal server error
 
@@ -111,37 +118,31 @@ Retrieve and mark an OTP as used.
 
 ### Using cURL
 
-**Store OTP:**
+**Store message:**
 ```bash
 curl -X POST http://localhost:3000/api/otp \
   -H "Content-Type: application/json" \
-  -d '{
-    "phone": "1234567890",
-    "message": "Your verification code is 123456"
-  }'
+  -d '{"phone": "1234567890", "message": "Your full SMS body here"}'
 ```
 
-**Retrieve OTP:**
+**Check for message (path-based):**
 ```bash
-curl "http://localhost:3000/api/otp?phone=1234567890"
+curl "http://localhost:3000/api/sms/1234567890"
 ```
 
 ### Using JavaScript/TypeScript
 
 ```typescript
-// Store OTP
-const storeResponse = await fetch('http://localhost:3000/api/otp', {
+// Store message
+await fetch('http://localhost:3000/api/otp', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    phone: '1234567890',
-    message: 'Your OTP is 123456'
-  })
+  body: JSON.stringify({ phone: '1234567890', message: 'Full SMS text' })
 });
 
-// Retrieve OTP
-const retrieveResponse = await fetch('http://localhost:3000/api/otp?phone=1234567890');
-const { otp } = await retrieveResponse.json();
+// Check for message
+const res = await fetch('http://localhost:3000/api/sms/1234567890');
+const data = await res.json(); // { ok, count, messages, checkedAt }
 ```
 
 ## Deployment to Vercel
@@ -163,10 +164,7 @@ vercel login
 vercel
 ```
 
-4. Create a KV database in Vercel:
-   - Go to your project dashboard
-   - Navigate to "Storage" → "Create" → "KV Database"
-   - Environment variables are automatically configured when you link the KV database
+4. Add `REDIS_URL` in Project Settings → Environment Variables (Redis connection string)
 
 ### Option 2: Deploy via GitHub
 
@@ -195,35 +193,34 @@ vercel
 sms_forward_server/
 ├── app/
 │   └── api/
-│       └── otp/
-│           └── route.ts          # API route handlers
+│       ├── otp/
+│       │   └── route.ts          # POST: store message
+│       └── sms/
+│           └── [number]/
+│               └── route.ts      # GET: check message by number
 ├── lib/
-│   ├── redis.ts                   # Redis client setup
-│   ├── types.ts                   # TypeScript type definitions
-│   └── utils.ts                   # Utility functions (OTP extraction, validation)
-├── .env.example                   # Environment variables template
-├── .gitignore
-├── next.config.js                 # Next.js configuration
+│   ├── redis.ts                  # Redis client
+│   ├── types.ts                  # TypeScript types
+│   └── utils.ts                  # Phone validation, etc.
+├── .env.example
+├── next.config.js
 ├── package.json
 ├── README.md
-└── tsconfig.json                  # TypeScript configuration
+└── tsconfig.json
 ```
 
 ## How It Works
 
-1. **OTP Storage (POST):**
-   - Accepts phone number and SMS message
-   - Extracts 4-8 digit OTP using regex
-   - Stores in Redis with key format: `otp:{phone}`
-   - Sets 2-minute expiration (TTL)
-   - Marks OTP as unused
+1. **Store (POST /api/otp):**
+   - Accepts `phone` and `message` (full body; no OTP extraction)
+   - Stores in Redis with key `sms:{phone}`, TTL 1 hour
+   - Marks as unused
 
-2. **OTP Retrieval (GET):**
-   - Validates phone number parameter
-   - Fetches OTP from Redis
-   - Checks if OTP exists and is unused
-   - Marks OTP as used
-   - Returns OTP value
+2. **Check (GET /api/sms/[number]):**
+   - Sync HTTP only (no WebSockets)
+   - Fetches stored message for that number
+   - If unused: returns it in `messages`, marks as used
+   - Always returns `{ ok, count, messages, checkedAt }`
 
 ## Performance & Scalability
 
@@ -235,10 +232,9 @@ sms_forward_server/
 
 ## Security Considerations
 
-- OTPs expire after 2 minutes
-- OTPs can only be used once
-- Phone number validation prevents injection
-- No sensitive data in logs (no console.log in production)
+- Messages expire after 1 hour (TTL)
+- Each message can only be read once (marked used on GET)
+- Phone number validation
 - Environment variables for credentials
 
 ## License

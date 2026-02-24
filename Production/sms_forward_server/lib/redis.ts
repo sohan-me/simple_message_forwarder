@@ -1,9 +1,9 @@
 import Redis from 'ioredis';
-import type { OTPData } from './types';
+import type { SMSData } from './types';
 
 // Redis client interface
 interface StorageClient {
-  setex(key: string, seconds: number, value: OTPData): Promise<void>;
+  setex(key: string, seconds: number, value: SMSData): Promise<void>;
   get<T>(key: string): Promise<T | null>;
   quit(): Promise<void>;
 }
@@ -52,7 +52,7 @@ class RedisClient implements StorageClient {
     });
   }
 
-  async setex(key: string, seconds: number, value: OTPData): Promise<void> {
+  async setex(key: string, seconds: number, value: SMSData): Promise<void> {
     try {
       // Ensure connection is established
       if (this.client.status !== 'ready') {
